@@ -36,6 +36,9 @@ module Fluent::Plugin
     desc "The field name of the client's address."
     config_param :source_address_key, :string, default: nil
 
+    desc "File name of the record transformation function"
+    config_param :record_transform, :string, default: nil
+
     config_param :blocking_timeout, :time, default: 0.5
 
     desc 'The payload is read up to this character.'
@@ -88,6 +91,14 @@ module Fluent::Plugin
         end
       end
 
+      if !@record_transform.nil?
+        if File.exist?(@record_transform)
+          @transform_fn = File.read(@record_transform)
+        else
+          raise Fluent::ConfigError, "cannot open modify function file '#{@record_transform}'"
+        end
+      end
+
       @parser = parser_create(conf: parser_config)
     end
 
@@ -118,6 +129,8 @@ module Fluent::Plugin
                 log.warn "pattern not matched", message: msg
                 next
               end
+
+              record_transform_per_connection(conn, record)
 
               tag = extract_tag_from_record(record)
               tag ||= @tag
@@ -150,6 +163,8 @@ module Fluent::Plugin
                 next
               end
 
+              record_transform_per_connection(conn, record)
+
               time ||= extract_time_from_record(record) || Fluent::EventTime.now
               record[@source_address_key] = conn.remote_addr if @source_address_key
               record[@source_hostname_key] = conn.remote_host if @source_hostname_key
@@ -175,6 +190,16 @@ module Fluent::Plugin
       end
 
       true
+    end
+
+    def record_transform_per_connection(conn, record)
+      if !@record_transform.nil?
+        sandbox = Class.new
+        sandbox.instance_variable_set :@conn, conn
+        sandbox.instance_variable_set :@record, record
+        sandbox.instance_eval @transform_fn
+        sandbox.instance_eval File.basename(@record_transform, '.rb')
+      end
     end
   end
 end

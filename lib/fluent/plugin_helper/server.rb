@@ -401,6 +401,10 @@ module Fluent
           @peeraddr[1]
         end
 
+        def socket
+          @sock
+        end
+
         def send(data, flags = 0)
           @sock.send(data, flags)
         end
@@ -664,6 +668,10 @@ module Fluent
             @closing = false
 
             @mutex = Mutex.new # to serialize #write and #close
+          end
+
+          def ssl_handler
+            @_handler_socket
           end
 
           def to_io
